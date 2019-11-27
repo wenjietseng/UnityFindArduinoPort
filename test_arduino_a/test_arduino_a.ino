@@ -1,4 +1,4 @@
-#define BOARD_NAME "horse" // "bow", "fish"
+#define BOARD_NAME "horse" // "horse", "bow", "fish"
 #define DEBUG 0
 String readStringInput = "";
 bool readComplete = false;
@@ -22,7 +22,7 @@ void loop() {
       {
         if (readStringInput == "ping")
         {
-            Serial.println(BOARD_NAME);
+            for (int i = 0; i < 500; i++) Serial.println(BOARD_NAME);
             readStringInput = "";
         }
         else
