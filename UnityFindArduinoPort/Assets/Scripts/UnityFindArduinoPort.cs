@@ -10,101 +10,111 @@ public class UnityFindArduinoPort : MonoBehaviour
 {
     private CommunicateWithArduino horseUno;
     private CommunicateWithArduino bowUno;
+    
+    private CommunicateWithArduino fishUno;
     private CommunicateWithArduino[] unos;
-    private Thread[] readThreads;
     private string[] ports;
     private string[] readStrings;
-
+    private bool completeCheckingPorts;
     private const string pingCmd = "ping";
     private string receivedData = "";
     private float waitSec = 1f;
-    private bool findingPorts = true;
     private int boardNum;
     
     void Start()
 	{
+        InitializeSerialPorts();
+    }
+
+
+    void Update()
+    {
+        ReadConnectedPorts();
+        if (!completeCheckingPorts)
+        {
+            if ((horseUno != null && bowUno != null) || (fishUno != null)) completeCheckingPorts = true;
+            SendPingToPorts();
+        }
+    }
+
+    private void SendPingToPorts()
+    {
+        // Ping all connected serial ports
+        for (int i = 0; i < boardNum; i++)
+        {
+            if (unos[i].isConnected && unos[i] != null)
+            {
+                new Thread(unos[i].SendData).Start(pingCmd);
+            }
+        }
+        
+        for (int i = 0; i < boardNum; i++)
+        {
+            if (unos[i].isConnected && unos[i] != null)
+            {
+                if (unos[i].readData == "horse") 
+                {
+                    horseUno = unos[i];
+                    unos[i] = null;
+                }
+                else if (unos[i].readData == "bow")
+                {
+                    bowUno = unos[i];
+                    unos[i] = null;
+                }
+                else if (unos[i].readData == "fish")
+                {
+                    fishUno = unos[i];
+                    unos[i] = null;
+                }
+                else Debug.Log("unknown recevied data.");
+            }
+        }
+    }
+
+    private void ReadConnectedPorts()
+    {
+        // read all connected serial ports
+        for (int i = 0; i < boardNum; i++)
+        {
+            if (unos[i] != null)
+            {
+                if (unos[i].isConnected)
+                {
+                    if (unos[i].readData != "" && unos[i].readData != readStrings[i])
+                    {
+                        readStrings[i] = unos[i].readData;
+                        Debug.Log(unos[i].portName + ": " + readStrings[i]);
+                    }
+                }
+            }
+        }
+    }
+
+    private void InitializeSerialPorts()
+    {
         ports = SerialPort.GetPortNames();
-        foreach (string s in ports) Debug.Log(s);
+        foreach (string s in ports) Debug.Log("Find connections on: " + s);
+
         boardNum = ports.Length;
         unos = new CommunicateWithArduino[boardNum];
         readStrings = new string[boardNum];
+
+        // initialize communications
         for (int i = 0; i < boardNum; i++)
         {
             unos[i] = new CommunicateWithArduino(ports[i], baudRate:9600);
             readStrings[i] = "";
         }
-        // for (int i = 0; i < boardNum; i++)
-        // {
-        //     if (unos[i].isConnected)
-        //     {
-                new Thread(() => {readStrings[1] = unos[1].ReceiveData(); });
-            // }
-        // }
-     }
 
-
-    // Update is called once per frame
-    void Update()
-    {
+        // if connection initialized successfully, start reading serial port
         for (int i = 0; i < boardNum; i++)
         {
             if (unos[i].isConnected)
             {
-                if (readStrings[i] != "") Debug.Log(unos[i].portName + ": " + readStrings[i]);
+                new Thread(unos[i].ReceiveData).Start();
             }
         }
-
-        if (Input.GetKeyDown(KeyCode.P) && findingPorts)
-        {
-            for (int i = 0; i < boardNum; i++)
-            {
-                if (unos[i].isConnected)
-                {
-                    new Thread(unos[i].SendData).Start(pingCmd);
-                }
-            }
-            findingPorts = false;
-        }
-    }
-
-    public IEnumerator PingArduinos(string portName)
-    {
-
-
-        CommunicateWithArduino pingArduino = new CommunicateWithArduino(portName, baudRate:9600);
-        Debug.Log("open " + portName);
-        new Thread(pingArduino.ConnectToArduino).Start();
-        Debug.Log("ping " + portName);
-        new Thread(pingArduino.SendData).Start(pingCmd);
-        yield return new WaitForSeconds(waitSec);
-        new Thread(() => 
-        {   
-            if (pingArduino.ReceiveData() != "") receivedData = pingArduino.ReceiveData();
-        }).Start();
-        yield return new WaitForSeconds(waitSec * 10);
-        // new Thread(pingArduino.CloseSerial).Start();
-        yield return new WaitForSeconds(waitSec);
-        if (receivedData == "fish")
-        {
-            // unoFish = new CommunicateWithArduino(portName, baudRate:9600);
-            // new Thread(unoFish.ConnectToArduino).Start();
-            Debug.Log("Find fish arduino on " + portName + ", connection starts.");
-        }
-        else if (receivedData == "horse")
-        {
-            // unoHorse = new CommunicateWithArduino(portName, baudRate:9600);
-            // new Thread(unoHorse.ConnectToArduino).Start();
-            Debug.Log("Find horse arduino on " + portName + ", connection starts.");
-        }
-        else if (receivedData == "bow")
-        {
-            // unoBow = new CommunicateWithArduino(portName, baudRate:9600);
-            // new Thread(unoBow.ConnectToArduino).Start();
-            Debug.Log("Find bow arduino on " + portName + ", connection starts.");
-        }
-        else if (receivedData == "") Debug.Log("The arduino on " + portName + " has no response.");
-        else Debug.Log("The arduino on " + portName + " is not the correct one.");
-        yield return 0;
     }
 
     class CommunicateWithArduino
@@ -114,6 +124,7 @@ public class UnityFindArduinoPort : MonoBehaviour
 
 	    public bool isConnected;
         public string portName;
+        public string readData = "";
 		private SerialPort arduinoController;
 
 	    private int baudRate;
@@ -129,7 +140,7 @@ public class UnityFindArduinoPort : MonoBehaviour
 		public CommunicateWithArduino(string portName, int baudRate = 9600, Parity parity = Parity.None,
                                       int dataBits = 8, StopBits stopBits = StopBits.One,
                                       Handshake handshake = Handshake.None, bool RtsEnable = true,
-                                      int ReadTimeout = 1, bool isMac = false, bool isConnected = true) {
+                                      int ReadTimeout = 50, bool isMac = false, bool isConnected = true) {
             this.portName = portName;
             this.baudRate = baudRate;
             this.parity = parity;
@@ -174,14 +185,12 @@ public class UnityFindArduinoPort : MonoBehaviour
                     this.isConnected = false;
                     Debug.Log("Port " + this.portName + " not exists");
                 }
-                Debug.LogWarning(arduinoController);
 			}
 		}
         
 		public void SendData(object obj)
         {
 			string data = obj as string;
-			// Debug.Log(data);
 			if (connected)
             {
 				if (arduinoController != null)
@@ -203,19 +212,20 @@ public class UnityFindArduinoPort : MonoBehaviour
 			Thread.Sleep(500);
 		}
 
-        public string ReceiveData()
+        public void ReceiveData()
         {
-            string message = "";
-            while (this.isConnected) {
-                print("keep running?");
-                try
+            while (true)
+            {
+                if (arduinoController != null && arduinoController.IsOpen)
                 {
-                    message = arduinoController.ReadLine();
-                    Console.WriteLine(message);
+                    try
+                    {
+                        readData = arduinoController.ReadLine();
+                        // Debug.Log(readData);
+                    }
+                    catch (TimeoutException) { }
                 }
-                catch (TimeoutException) { }
             }
-            return message;
         }
 
         public void CloseSerial()
