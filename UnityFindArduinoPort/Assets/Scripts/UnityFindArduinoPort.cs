@@ -8,17 +8,15 @@ using System.Threading;
 using System.Management;
 public class UnityFindArduinoPort : MonoBehaviour
 {
-    private CommunicateWithArduino horseUno;
-    private CommunicateWithArduino bowUno;
-    
-    private CommunicateWithArduino fishUno;
+    public int fishNum = -1;
+    public int horseNum = -1;
+    public int bowNum = -1;
+    public string[] readStrings;
+
     private CommunicateWithArduino[] unos;
     private string[] ports;
-    private string[] readStrings;
-    private bool completeCheckingPorts;
     private const string pingCmd = "ping";
-    private string receivedData = "";
-    private float waitSec = 1f;
+    private bool finishPing = true;
     private int boardNum;
     
     void Start()
@@ -29,12 +27,15 @@ public class UnityFindArduinoPort : MonoBehaviour
 
     void Update()
     {
-        ReadConnectedPorts();
-        if (!completeCheckingPorts)
+        if (finishPing)
         {
-            if ((horseUno != null && bowUno != null) || (fishUno != null)) completeCheckingPorts = true;
-            SendPingToPorts();
+            ReadConnectedPorts();
+            CheckReadData();
         }
+
+        if (Input.GetKeyDown(KeyCode.H) && horseNum != -1) new Thread(unos[horseNum].SendData).Start("horse");
+        if (Input.GetKeyDown(KeyCode.B) && bowNum != -1) new Thread(unos[bowNum].SendData).Start("bow");
+        if (Input.GetKeyDown(KeyCode.F) && fishNum != -1) new Thread(unos[fishNum].SendData).Start("bow");
     }
 
     private void SendPingToPorts()
@@ -42,53 +43,34 @@ public class UnityFindArduinoPort : MonoBehaviour
         // Ping all connected serial ports
         for (int i = 0; i < boardNum; i++)
         {
-            if (unos[i].isConnected && unos[i] != null)
-            {
-                new Thread(unos[i].SendData).Start(pingCmd);
-            }
+            if (unos[i].isConnected && unos[i] != null) new Thread(unos[i].SendData).Start(pingCmd);
         }
-        
-        for (int i = 0; i < boardNum; i++)
-        {
-            if (unos[i].isConnected && unos[i] != null)
-            {
-                if (unos[i].readData == "horse") 
-                {
-                    horseUno = unos[i];
-                    unos[i] = null;
-                }
-                else if (unos[i].readData == "bow")
-                {
-                    bowUno = unos[i];
-                    unos[i] = null;
-                }
-                else if (unos[i].readData == "fish")
-                {
-                    fishUno = unos[i];
-                    unos[i] = null;
-                }
-                else Debug.Log("unknown recevied data.");
-            }
-        }
+        finishPing = false;
     }
 
     private void ReadConnectedPorts()
     {
-        // read all connected serial ports
+        for (int i = 0; i < boardNum; i++)
+            if (unos[i] != null && unos[i].isConnected) unos[i].readData = unos[i].ReceiveData();
+    }
+    private void CheckReadData()
+    {
         for (int i = 0; i < boardNum; i++)
         {
-            if (unos[i] != null)
+            if (unos[i] != null && unos[i].isConnected)
             {
-                if (unos[i].isConnected)
+                if (unos[i].readData != "" && unos[i].readData != readStrings[i])
                 {
-                    if (unos[i].readData != "" && unos[i].readData != readStrings[i])
-                    {
-                        readStrings[i] = unos[i].readData;
-                        Debug.Log(unos[i].portName + ": " + readStrings[i]);
-                    }
-                }
+                    readStrings[i] = unos[i].readData;
+                    Debug.Log(unos[i].portName + ": " + readStrings[i]);                        
+                    if (unos[i].readData == "horse") horseNum = i;
+                    else if (unos[i].readData == "bow") bowNum = i;
+                    else if (unos[i].readData == "fish") fishNum = i;
+                    else Debug.Log("unknown recevied data on " + i + " uno");
+                }                
             }
         }
+        if ((horseNum != -1 && bowNum != -1) || fishNum != -1) SendPingToPorts();
     }
 
     private void InitializeSerialPorts()
@@ -105,15 +87,6 @@ public class UnityFindArduinoPort : MonoBehaviour
         {
             unos[i] = new CommunicateWithArduino(ports[i], baudRate:9600);
             readStrings[i] = "";
-        }
-
-        // if connection initialized successfully, start reading serial port
-        for (int i = 0; i < boardNum; i++)
-        {
-            if (unos[i].isConnected)
-            {
-                new Thread(unos[i].ReceiveData).Start();
-            }
         }
     }
 
@@ -212,20 +185,18 @@ public class UnityFindArduinoPort : MonoBehaviour
 			Thread.Sleep(500);
 		}
 
-        public void ReceiveData()
+        public string ReceiveData()
         {
-            while (true)
+            string s;
+            try
             {
-                if (arduinoController != null && arduinoController.IsOpen)
-                {
-                    try
-                    {
-                        readData = arduinoController.ReadLine();
-                        // Debug.Log(readData);
-                    }
-                    catch (TimeoutException) { }
-                }
+                s = arduinoController.ReadLine();
             }
+            catch (TimeoutException)
+            {
+                s = "";
+            }
+            return s;
         }
 
         public void CloseSerial()

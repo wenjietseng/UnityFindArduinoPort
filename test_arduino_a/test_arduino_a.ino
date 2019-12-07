@@ -2,6 +2,7 @@
 #define DEBUG 0
 String readStringInput = "";
 bool readComplete = false;
+bool boardNameSending = true;
 int cmd_value = 0;
 
 void setup() {
@@ -14,7 +15,7 @@ void loop() {
 #else DEBUG == 0
   delay(10);
 #endif
-
+  if (boardNameSending) Serial.println(BOARD_NAME);
   while (Serial.available())
   {
       char c = Serial.read();
@@ -22,7 +23,7 @@ void loop() {
       {
         if (readStringInput == "ping")
         {
-            for (int i = 0; i < 500; i++) Serial.println(BOARD_NAME);
+            boardNameSending = false;
             readStringInput = "";
         }
         else
